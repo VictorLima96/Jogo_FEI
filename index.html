@@ -2,14 +2,30 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>Pong Roguelike - Balatro & Ultrapool</title>
+  <title>VARELA PONG ROGUELIKE - A Batalha dos 3 Bosses</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@700;900&family=Press+Start+2P&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <!-- Container centralizado do jogo -->
-  <div class="jogo-container">
-    <canvas id="tela" width="800" height="500"></canvas>
+  <div class="jogo-wrapper">
+    <!-- Título do Jogo -->
+    <header class="game-header">
+      <h1 class="game-title">VARELA PONG <span class="badge-rogue">ROGUELIKE</span></h1>
+      <p class="game-subtitle">🔥 A BATALHA DOS 3 BOSSES: EXCEL, FREE FIRE & FREDDY FAZBEAR 🔥</p>
+    </header>
+
+    <!-- Canvas do Jogo -->
+    <div class="canvas-container">
+      <canvas id="tela" width="860" height="520"></canvas>
+    </div>
+
+    <!-- Barra de Ajuda / Teclas -->
+    <footer class="game-footer">
+      <div class="dica"><strong>Controles:</strong> W / S ou Setas (ou Mouse) | <strong>Dash:</strong> W/S 2x | <strong>Soco:</strong> ESPAÇO | <strong>Shield:</strong> E | <strong>Pausar:</strong> P | <strong>Mudo:</strong> M</div>
+    </footer>
   </div>
 
   <script src="game.js"></script>

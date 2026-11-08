@@ -1,4 +1,6 @@
-/* Estilo simples para centralizar o canvas e criar um fundo escuro */
+/* ========================================================
+   VARELA PONG ROGUELIKE - ESTILO RETRO NEON COLORIDO
+   ======================================================== */
 
 * {
   box-sizing: border-box;
@@ -7,26 +9,88 @@
 }
 
 body {
-  background-color: #121418;
+  background: radial-gradient(circle at 50% 30%, #151d2a 0%, #080c12 100%);
   color: #ffffff;
-  font-family: Arial, sans-serif;
+  font-family: 'Rubik', Arial, sans-serif;
   display: flex;
   justify-content: center;
   align-items: center;
   min-height: 100vh;
   user-select: none;
+  overflow: hidden;
 }
 
-.jogo-container {
+.jogo-wrapper {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
   align-items: center;
+  gap: 10px;
+}
+
+/* TÍTULO DO JOGO */
+.game-header {
+  text-align: center;
+}
+
+.game-title {
+  font-size: 32px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: #fff;
+  text-shadow: 0 0 15px rgba(0, 230, 255, 0.6), 0 0 30px rgba(255, 0, 128, 0.4);
+  background: linear-gradient(180deg, #ffffff 0%, #00e5ff 60%, #ff007f 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.badge-rogue {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 14px;
+  background: #ff0055;
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: 6px;
+  vertical-align: middle;
+  text-shadow: none;
+  -webkit-text-fill-color: #fff;
+  box-shadow: 0 0 12px rgba(255, 0, 85, 0.7);
+}
+
+.game-subtitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffcc00;
+  letter-spacing: 1px;
+  text-shadow: 0 0 8px rgba(255, 204, 0, 0.5);
+  margin-top: 4px;
+}
+
+/* CONTAINER DO CANVAS */
+.canvas-container {
+  position: relative;
+  border: 4px solid #00f0ff;
+  border-radius: 14px;
+  box-shadow: 0 0 35px rgba(0, 240, 255, 0.35), 0 15px 40px rgba(0, 0, 0, 0.9);
+  overflow: hidden;
+  background: #0d121c;
 }
 
 canvas {
-  background-color: #1a1e24;
-  border: 4px solid #2e3846;
-  border-radius: 8px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
   display: block;
+  cursor: crosshair;
+}
+
+/* RODAPÉ COM DICAS */
+.game-footer {
+  text-align: center;
+  font-size: 12px;
+  color: #9cb5cf;
+  background: rgba(18, 25, 38, 0.85);
+  padding: 6px 16px;
+  border-radius: 20px;
+  border: 1px solid #23354d;
+}
+
+.dica strong {
+  color: #00e5ff;
 }
