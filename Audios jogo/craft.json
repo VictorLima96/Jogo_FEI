@@ -1,0 +1,29 @@
+{
+  "version": 2,
+  "name": "quero que faça um roguelike",
+  "request": "quero que faça um roguelike deckbuilder do pong com uma vibe parecida com o balatro e uma pegade de ultrapool para o jogo não ficar tão simples, e o cara da imagem da foto é o icone do jogador(e jogador), e o excel da segunda imagem é o seu inimigo.\n\ncoloquei uma pasta de audios do jogo para que use em cada gol. \n\ngol 1 = 1 gol\n\ngol 2 = 2 gol\n\ngol 3 = 3+ gol\n\nisso tudo tem que ser feito com javascript, css e html.",
+  "target": {
+    "kind": "none"
+  },
+  "stack": "Rust + egui (eframe)",
+  "status": "needs_you",
+  "note": "Hermes Agent stopped with exit code 1073807364. Hermes Agent printed nothing.\n\nTo try it yourself, run:\nhermes -z '[your message, 6202 characters]'",
+  "created_ms": 1793928908289,
+  "updated_ms": 1793932049320,
+  "checks": [],
+  "agent_session": null,
+  "allowed_actions": [],
+  "last_reply": "",
+  "asset_budget_usd": 5.0,
+  "generate_assets": false,
+  "app_in_root": true,
+  "start_files": [
+    "empategol.mp3",
+    "gol1.mp3",
+    "gol2.mp3",
+    "gol3.mp3",
+    "robogol1.mp3",
+    "robogol2.mp3",
+    "robogol3.mp3"
+  ]
+}
