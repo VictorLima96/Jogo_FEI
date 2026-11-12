@@ -15,7 +15,7 @@ let screenShake = 0; // Tremor muito suave e sem tremer a HUD
 const dadosBosses = [
   {
     nome: "Planilha Excel (Fácil)",
-    imgSrc: "Images/boss_excel.png",
+    imgSrc: "assets/boss_excel.png",
     velocidade: 195,
     altura: 90,
     corTema: "#107c41",
@@ -23,7 +23,7 @@ const dadosBosses = [
   },
   {
     nome: "Free Fire (Médio)",
-    imgSrc: "Images/boss_freefire.png",
+    imgSrc: "assets/boss_freefire.png",
     velocidade: 255,
     altura: 88,
     corTema: "#ff8c00",
@@ -32,7 +32,7 @@ const dadosBosses = [
   },
   {
     nome: "Freddy Fazbear (Difícil)",
-    imgSrc: "Images/boss_fred.png",
+    imgSrc: "assets/boss_fred.png",
     velocidade: 320,
     altura: 90,
     corTema: "#8b4513",
@@ -154,17 +154,18 @@ function carregarImg(caminho) {
   return img;
 }
 
-const imgVarela = carregarImg("Images/player.png");
-const imgBossExcel = carregarImg("Images/boss_excel.png");
-const imgBossFreeFire = carregarImg("Images/boss_freefire.png");
-const imgBossFred = carregarImg("Images/boss_fred.png");
-const imgCholeraFred = carregarImg("Images/cholera_fred.png");
-const imgGatoMilitar = carregarImg("Images/gato_militar.png");
-const imgGatoKawaii = carregarImg("Images/gato_kawaii.png");
-const imgCaracol = carregarImg("Images/caracol.png");
-const imgOculos = carregarImg("Images/oculos.png");
-const imgCoracao = carregarImg("Images/coracao.png");
-const imgGameOver = carregarImg("Images/game_over.png");
+const imgVarela = carregarImg("assets/player.png");
+const imgBossExcel = carregarImg("assets/boss_excel.png");
+const imgBossFreeFire = carregarImg("assets/boss_freefire.png");
+const imgBossFred = carregarImg("assets/boss_fred.png");
+const imgCholeraFred = carregarImg("assets/cholera_fred.png");
+const imgGatoMilitar = carregarImg("assets/gato_militar.png");
+const imgGatoKawaii = carregarImg("assets/gato_kawaii.png");
+const imgCaracol = carregarImg("assets/caracol.png");
+const imgOculos = carregarImg("assets/ponto_jogador.png");
+const imgPontoBoss = carregarImg("assets/ponto_inimigo.png");
+const imgCoracao = carregarImg("assets/coracao.png");
+const imgGameOver = carregarImg("assets/game_over.png");
 
 function getImagemBossAtual() {
   if (bossAtualIndex === 0) return imgBossExcel;
@@ -185,18 +186,35 @@ function carregarAudio(caminho) {
 }
 
 const sonsGolVarela = [
-  carregarAudio("Audios/gol1.mp3"),
-  carregarAudio("Audios/gol2.mp3"),
-  carregarAudio("Audios/gol3.mp3")
+  carregarAudio("Audios/Audios Gol Va/gol1.mp3"),
+  carregarAudio("Audios/Audios Gol Va/gol2.mp3"),
+  carregarAudio("Audios/Audios Gol Va/gol3.mp3")
 ];
 
 const sonsGolBoss = [
-  carregarAudio("Audios/robogol1.mp3"),
-  carregarAudio("Audios/robogol2.mp3"),
-  carregarAudio("Audios/robogol3.mp3")
+  carregarAudio("Audios/Audios Gol En/robogol1.mp3"),
+  carregarAudio("Audios/Audios Gol En/robogol2.mp3"),
+  carregarAudio("Audios/Audios Gol En/robogol3.mp3")
 ];
 
-const somEmpate = carregarAudio("Audios/empategol.mp3");
+const somEmpate = carregarAudio("Audios/Audio Em/empategol.mp3");
+
+const falasVarela = [
+  carregarAudio("Audios/Audios Varela/Var1.mp3"),
+  carregarAudio("Audios/Audios Varela/Var2.mp3"),
+  carregarAudio("Audios/Audios Varela/Var3.mp3")
+];
+const falasBosses = [
+  ["Audios/Audios Enemy/Excel1.mp3", "Audios/Audios Enemy/Excel2.mp3", "Audios/Audios Enemy/Excel3.mp3"].map(carregarAudio),
+  ["Audios/Audios Enemy/FF1.mp3", "Audios/Audios Enemy/FF2.mp3", "Audios/Audios Enemy/FF3.mp3", "Audios/Audios Enemy/FF4.mp3"].map(carregarAudio),
+  ["Audios/Audios Enemy/Freddy1.mp3", "Audios/Audios Enemy/Freddy2.mp3", "Audios/Audios Enemy/Freddy3.mp3"].map(carregarAudio)
+];
+const ostMenu = carregarAudio("Audios/OST/15 - B6 - Relaxed Scene.mp3");
+ostMenu.loop = true;
+ostMenu.volume = 0.35;
+let proximaFalaVarela = 9;
+let proximaFalaBoss = 13;
+let musicaMenuTocando = false;
 
 let idxGolVarela = 0;
 let idxGolBoss = 0;
@@ -210,15 +228,47 @@ function pararSonsGols() {
   }
 }
 
+function pararListaAudio(lista) {
+  for (const audio of lista) {
+    audio.pause();
+    audio.currentTime = 0;
+  }
+}
+
+function pararFalas() {
+  pararListaAudio(falasVarela);
+  falasBosses.forEach(pararListaAudio);
+}
+
+function tocarAudioAleatorio(lista) {
+  if (!somLigado || !lista || lista.length === 0) return;
+  pararListaAudio(lista);
+  const audio = lista[Math.floor(Math.random() * lista.length)];
+  audio.currentTime = 0;
+  audio.play().catch(() => {});
+}
+
+function sincronizarOSTMenu() {
+  if (estado === "menu" && somLigado) {
+    if (!musicaMenuTocando) {
+      ostMenu.currentTime = 0;
+      musicaMenuTocando = true;
+      ostMenu.play().catch(() => { musicaMenuTocando = false; });
+    }
+  } else {
+    ostMenu.pause();
+    if (estado !== "menu") ostMenu.currentTime = 0;
+    musicaMenuTocando = false;
+  }
+}
+
 function tocarAudioGol(quem) {
   if (!somLigado) return;
   pararSonsGols();
+  pararFalas();
 
   try {
-    if (vidasVarela === vidasBoss) {
-      somEmpate.currentTime = 0;
-      somEmpate.play().catch(() => {});
-    } else if (quem === "varela") {
+    if (quem === "varela") {
       const som = sonsGolVarela[idxGolVarela];
       idxGolVarela = (idxGolVarela + 1) % sonsGolVarela.length;
       som.currentTime = 0;
@@ -367,6 +417,7 @@ function prepararEscolhaInicial() {
     todosPowerUps[3]  // Dash Relâmpago
   ];
   estado = "escolha_inicial";
+  sincronizarOSTMenu();
 }
 
 function escolherPowerUp(idx) {
@@ -399,6 +450,7 @@ const teclas = {};
 
 window.addEventListener("keydown", function(e) {
   liberarAudio();
+  sincronizarOSTMenu();
   teclas[e.key] = true;
 
   if (e.code === "Space") {
@@ -455,6 +507,7 @@ window.addEventListener("keydown", function(e) {
   // Tecla M para Som
   if (e.key === "m" || e.key === "M") {
     somLigado = !somLigado;
+    sincronizarOSTMenu();
     criarTextoFlutuante(canvas.width / 2, 40, somLigado ? "🔊 SOM LIGADO" : "🔇 SOM MUTADO", "#fff", 16);
   }
 
@@ -464,10 +517,10 @@ window.addEventListener("keydown", function(e) {
   }
 
   // Dash com duplo clique
-  if (temPowerUp("varela_dash") && estado === "jogando" && varela.dashCooldown <= 0 && varela.mortoTimer <= 0) {
+  if (!e.repeat && temPowerUp("varela_dash") && estado === "jogando" && varela.dashCooldown <= 0 && varela.mortoTimer <= 0) {
     const agora = Date.now();
     if (e.key === "w" || e.key === "W" || e.key === "ArrowUp") {
-      if (agora - ultimoToqueCima < 280) {
+      if (agora - ultimoToqueCima < 360) {
         varela.y -= 120;
         if (varela.y < 0) varela.y = 0;
         varela.dashCooldown = 1.8;
@@ -479,7 +532,7 @@ window.addEventListener("keydown", function(e) {
       ultimoToqueCima = agora;
     }
     if (e.key === "s" || e.key === "S" || e.key === "ArrowDown") {
-      if (agora - ultimoToqueBaixo < 280) {
+      if (agora - ultimoToqueBaixo < 360) {
         varela.y += 120;
         if (varela.y + varela.altura > canvas.height) varela.y = canvas.height - varela.altura;
         varela.dashCooldown = 1.8;
@@ -519,6 +572,7 @@ canvas.addEventListener("mousemove", function(e) {
 
 canvas.addEventListener("click", function() {
   liberarAudio();
+  sincronizarOSTMenu();
   if (estado === "escolhendo" || estado === "escolha_inicial") {
     const larguraCarta = 210;
     const alturaCarta = 265;
@@ -557,6 +611,7 @@ function reiniciarJogoCompleto() {
 }
 
 function iniciarBatalhaBoss() {
+  sincronizarOSTMenu();
   vidasVarela = MAX_VIDAS_VARELA; // 3 vidas para o jogador!
   vidasBoss = MAX_VIDAS_BOSS;     // 4 vidas para o boss (como solicitado!)
   pausado = false;
@@ -586,9 +641,12 @@ function iniciarBatalhaBoss() {
   varela.shieldCooldown = 0;
   varela.shieldAtivoTimer = 0;
   varela.dashCooldown = 0;
+  proximaFalaVarela = 7 + Math.random() * 7;
+  proximaFalaBoss = 10 + Math.random() * 9;
 
   resetarBola(1);
   estado = "jogando";
+  sincronizarOSTMenu();
 }
 
 function resetarBola(direcao = 1) {
@@ -627,6 +685,17 @@ function criarExplosao(x, y, cor, qtd = 12) {
 
 function atualizar(dt) {
   if (estado !== "jogando" || pausado) return;
+
+  proximaFalaVarela -= dt;
+  proximaFalaBoss -= dt;
+  if (proximaFalaVarela <= 0 && varela.mortoTimer <= 0) {
+    tocarAudioAleatorio(falasVarela);
+    proximaFalaVarela = 11 + Math.random() * 12;
+  }
+  if (proximaFalaBoss <= 0 && boss.mortoTimer <= 0) {
+    tocarAudioAleatorio(falasBosses[bossAtualIndex]);
+    proximaFalaBoss = 13 + Math.random() * 14;
+  }
 
   // 1. Timers do Varela
   if (varela.flashDano > 0) varela.flashDano -= dt;
@@ -1441,6 +1510,9 @@ function desenharPlacar() {
   ctx.font = "bold 14px Arial";
   ctx.textAlign = "left";
   ctx.fillText("VARELA (" + vidasVarela + " / " + MAX_VIDAS_VARELA + ")", 30, y + tamCoracao + 16);
+  if (imgOculos.complete && imgOculos.naturalWidth > 0) {
+    ctx.drawImage(imgOculos, 128, y + 2, 24, 18);
+  }
 
   // 4 Vidas do Boss (como pedido!)
   for (let i = 0; i < MAX_VIDAS_BOSS; i++) {
@@ -1463,6 +1535,9 @@ function desenharPlacar() {
   ctx.font = "bold 14px Arial";
   ctx.textAlign = "right";
   ctx.fillText(dados.nome.toUpperCase() + " (" + vidasBoss + " / " + MAX_VIDAS_BOSS + ")", canvas.width - 30, y + tamCoracao + 16);
+  if (imgPontoBoss.complete && imgPontoBoss.naturalWidth > 0) {
+    ctx.drawImage(imgPontoBoss, canvas.width - 30 - 4 * (tamCoracao + espaco) - 24, y + 2, 24, 18);
+  }
 
   // Centro
   ctx.fillStyle = "#ffcc00";
@@ -1573,6 +1648,7 @@ function desenharTelaEscolha(titulo = "ESCOLHA SEU POWER-UP") {
 
   ctx.fillStyle = "#00e5ff";
   ctx.font = "14px Arial";
+  ctx.textAlign = "center";
   ctx.fillText("Clique em uma carta ou aperte 1, 2 ou 3", canvas.width / 2, 85);
 
   const larguraCarta = 210;
