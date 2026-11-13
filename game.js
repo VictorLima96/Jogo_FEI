@@ -139,6 +139,7 @@ const imgs = {
   gatoMilitar: carregarImg("assets/gato_militar.png"),
   gatoKawaii: carregarImg("assets/gato_kawaii.png"),
   caracol: carregarImg("assets/caracol.png"),
+  gelo: carregarImg("assets/Gelo.png"),
   oculos: carregarImg("assets/player.png"),
   coracao: carregarImg("assets/coracao.png"),
   gameOver: carregarImg("assets/game_over.png")
@@ -171,7 +172,10 @@ const limitarY = (entidade) => {
 // 3. ÁUDIO SEQUENCIAL E SINTETIZADOR
 // ========================================================
 
-const carregarAudio = (caminho, volume = 0.8, loop = false) => {
+const VOLUME_EFEITOS = 0.6;
+const VOLUME_OST = 0.3;
+
+const carregarAudio = (caminho, volume = VOLUME_EFEITOS, loop = false) => {
   const a = new Audio(caminho);
   a.preload = "auto";
   a.volume = volume;
@@ -192,8 +196,8 @@ const faixasOST = [
   "17 - B8 - Quietness Sustained.mp3"
 ];
 
-const ostMenu = carregarAudio(`Audios/OST/${faixasOST[14]}`, 0.35, true);
-const ostBatalha = faixasOST.filter((_, i) => i !== 14).map(f => carregarAudio(`Audios/OST/${f}`, 0.4, true));
+const ostMenu = carregarAudio(`Audios/OST/${faixasOST[14]}`, VOLUME_OST, true);
+const ostBatalha = faixasOST.filter((_, i) => i !== 14).map(f => carregarAudio(`Audios/OST/${f}`, VOLUME_OST, true));
 let ostBatalhaAtual = null;
 
 const sonsGolVarela = [1, 2, 3].map(n => carregarAudio(`Audios/Audios Gol Va/gol${n}.mp3`));
@@ -201,7 +205,7 @@ const sonsGolBoss = [1, 2, 3].map(n => carregarAudio(`Audios/Audios Gol En/robog
 const somEmpate = carregarAudio("Audios/Audio Em/empategol.mp3");
 const somPerde = carregarAudio("Audios/Audio Perde/fahhhhhhhhhhhhhh.mp3");
 const somJumpscare = carregarAudio("Audios/Audios Enemy/Jumpscare.mp3");
-const somBeatbox = carregarAudio("Audios/Music Freddy/Beatbox.mp3", 0.7, true);
+const somBeatbox = carregarAudio("Audios/Music Freddy/Beatbox.mp3", VOLUME_OST, true);
 
 const falasVarela = [1, 2].map(n => carregarAudio(`Audios/Audios Varela/Var${n}.mp3`));
 const somVar3 = carregarAudio("Audios/Audios Varela/Var3.mp3");
@@ -227,12 +231,22 @@ const somFredito = carregarAudio("Audios/Audio Poderes/Fredditos.mp3");
 let somLigado = true;
 let proximaFalaVarela = 9;
 let proximaFalaBoss = 13;
+let falaAtiva = null;
+
+const todosAudiosFala = [
+  ...falasVarela, somVar3, ...falasBosses.flat(), somFF1, somFF2, somFF4,
+  somFreddy2, somJumpscare, somPerde, somFredito
+];
 
 function pararListaAudio(lista) {
   for (const a of lista) { a.pause(); a.currentTime = 0; }
 }
 
-const pararFalas = () => { pararListaAudio([...falasVarela, somVar3]); falasBosses.forEach(pararListaAudio); };
+const pararFalas = () => {
+  pararListaAudio(todosAudiosFala);
+  falaAtiva = null;
+  freditoPendente = false;
+};
 
 function tocarAudio(audio) {
   if (somLigado && audio) { audio.currentTime = 0; audio.play().catch(() => {}); }
@@ -240,22 +254,55 @@ function tocarAudio(audio) {
 
 function tocarAudioAleatorio(lista) {
   if (!somLigado || !lista?.length) return;
-  pararListaAudio(lista);
-  tocarAudio(lista[Math.floor(Math.random() * lista.length)]);
+  if (falaAtiva && !falaAtiva.paused) return;
+  tocarFala(lista[Math.floor(Math.random() * lista.length)]);
+}
+
+function tocarFala(audio) {
+  if (!somLigado || !audio) return;
+  if (falaAtiva && falaAtiva !== audio) {
+    falaAtiva.pause();
+    falaAtiva.currentTime = 0;
+  }
+  audio.currentTime = 0;
+  falaAtiva = audio;
+  audio.play().catch(() => {});
+  audio.onended = () => {
+    if (falaAtiva === audio) falaAtiva = null;
+  };
 }
 
 let freditoPendente = false;
 function tocarFredito() {
   if (!somLigado) return;
   if (!somFredito.paused) { freditoPendente = true; return; }
-  tocarAudio(somFredito);
+  tocarFala(somFredito);
 }
 somFredito.addEventListener("ended", () => {
-  if (freditoPendente) { freditoPendente = false; tocarAudio(somFredito); }
+  if (freditoPendente) { freditoPendente = false; tocarFala(somFredito); }
 });
 
-function checarEmpate() {
-  if (vidasVarela === vidasBoss) tocarAudio(somEmpate);
+function tocarAudioDepois(audio, audioAnterior) {
+  if (!somLigado || !audio) return;
+  if (!audioAnterior || audioAnterior.paused || audioAnterior.ended) {
+    tocarAudio(audio);
+    return;
+  }
+
+  let finalizado = false;
+  const tocarEmpate = () => {
+    if (finalizado) return;
+    finalizado = true;
+    audioAnterior.removeEventListener("ended", tocarEmpate);
+    audioAnterior.removeEventListener("error", tocarEmpate);
+    tocarAudio(audio);
+  };
+  audioAnterior.addEventListener("ended", tocarEmpate, { once: true });
+  audioAnterior.addEventListener("error", tocarEmpate, { once: true });
+}
+
+function checarEmpate(audioAnterior) {
+  if (vidasVarela === vidasBoss) tocarAudioDepois(somEmpate, audioAnterior);
 }
 
 function sincronizarMusica() {
@@ -270,26 +317,25 @@ function sincronizarMusica() {
     if (ostBatalhaAtual) { ostBatalhaAtual.pause(); ostBatalhaAtual = null; }
     somBeatbox.pause(); somBeatbox.currentTime = 0;
     if (ostMenu.paused) ostMenu.play().catch(() => {});
-  } else if (estado === "jogando") {
+  } else if (estado === "jogando" && bossAtualIndex === 2) {
     ostMenu.pause(); ostMenu.currentTime = 0;
-    if (bossAtualIndex === 2) {
-      if (ostBatalhaAtual) { ostBatalhaAtual.pause(); ostBatalhaAtual = null; }
-      if (somBeatbox.paused) somBeatbox.play().catch(() => {});
-    } else {
-      somBeatbox.pause(); somBeatbox.currentTime = 0;
-      if (!ostBatalhaAtual) {
-        ostBatalhaAtual = ostBatalha[Math.floor(Math.random() * ostBatalha.length)];
-        ostBatalhaAtual.currentTime = 0;
-        ostBatalhaAtual.play().catch(() => {});
-      }
+    if (ostBatalhaAtual) { ostBatalhaAtual.pause(); ostBatalhaAtual = null; }
+    if (somBeatbox.paused) somBeatbox.play().catch(() => {});
+  } else if (estado === "jogando" || estado === "escolha_inicial" || estado === "escolhendo") {
+    ostMenu.pause(); ostMenu.currentTime = 0;
+    somBeatbox.pause(); somBeatbox.currentTime = 0;
+    if (!ostBatalhaAtual) {
+      ostBatalhaAtual = ostBatalha[Math.floor(Math.random() * ostBatalha.length)];
+      ostBatalhaAtual.currentTime = 0;
     }
+    if (ostBatalhaAtual.paused) ostBatalhaAtual.play().catch(() => {});
   } else {
     pararOST();
   }
 }
 
 function tocarAudioGol(quem) {
-  if (!somLigado) return;
+  if (!somLigado) return null;
   pararFalas();
   const ehVarela = quem === "varela";
   const lista = ehVarela ? sonsGolVarela : sonsGolBoss;
@@ -297,6 +343,7 @@ function tocarAudioGol(quem) {
   const idx = (gols - 1 + lista.length) % lista.length;
   pararListaAudio(lista); // nunca sobrepor o mesmo conjunto
   tocarAudio(lista[idx]);
+  return lista[idx];
 }
 
 let audioCtx = null;
@@ -323,6 +370,25 @@ function tocarBip(freq = 400, tipo = "sine", duracao = 0.08) {
     gain.connect(audioCtx.destination);
     osc.start();
     osc.stop(audioCtx.currentTime + duracao);
+  } catch (e) {}
+}
+
+function tocarHover() {
+  if (!somLigado) return;
+  liberarAudio();
+  if (!audioCtx) return;
+  try {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(720, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(980, audioCtx.currentTime + 0.045);
+    gain.gain.setValueAtTime(0.035, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.055);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.055);
   } catch (e) {}
 }
 
@@ -434,6 +500,38 @@ function escolherPowerUp(idx) {
 // ========================================================
 
 const teclas = {};
+const BOTAO_JOGAR = { x: 330, y: 318, largura: 200, altura: 66 };
+let alvoHoverAtual = null;
+let estadoVisualAnterior = null;
+
+function obterAlvoInterativo(x, y) {
+  if (estado === "menu") {
+    return x >= BOTAO_JOGAR.x && x <= BOTAO_JOGAR.x + BOTAO_JOGAR.largura &&
+      y >= BOTAO_JOGAR.y && y <= BOTAO_JOGAR.y + BOTAO_JOGAR.altura ? "jogar" : null;
+  }
+  if (estado !== "escolhendo" && estado !== "escolha_inicial") return null;
+  const larguraCarta = 210, alturaCarta = 265, espaco = 25, yBase = 135;
+  const inicioX = (canvas.width - (3 * larguraCarta + 2 * espaco)) / 2;
+  for (let i = 0; i < cartasParaEscolha.length; i++) {
+    const xCarta = inicioX + i * (larguraCarta + espaco);
+    if (x >= xCarta && x <= xCarta + larguraCarta && y >= yBase && y <= yBase + alturaCarta) return `carta-${i}`;
+  }
+  return null;
+}
+
+document.getElementById("btn-play").addEventListener("click", () => {
+  liberarAudio();
+  if (estado === "menu") prepararEscolhaInicial();
+});
+
+document.getElementById("btn-play").addEventListener("mouseenter", () => {
+  if (estado === "menu" && alvoHoverAtual !== "jogar") tocarHover();
+  alvoHoverAtual = "jogar";
+});
+
+document.getElementById("btn-play").addEventListener("mouseleave", () => {
+  if (alvoHoverAtual === "jogar") alvoHoverAtual = null;
+});
 
 function ativarShield() {
   if (temPowerUp("shield_gol") && varela.shieldCooldown <= 0 && varela.mortoTimer <= 0) {
@@ -536,6 +634,11 @@ canvas.addEventListener("mousemove", (e) => {
   const ret = canvas.getBoundingClientRect();
   mouseX = e.clientX - ret.left;
   mouseY = e.clientY - ret.top;
+  const novoAlvoHover = obterAlvoInterativo(mouseX, mouseY);
+  if (novoAlvoHover !== alvoHoverAtual) {
+    if (novoAlvoHover) tocarHover();
+    alvoHoverAtual = novoAlvoHover;
+  }
 
   if (estado === "jogando" && !pausado && mouseX < canvas.width / 2 && varela.mortoTimer <= 0) {
     varela.y = mouseY - varela.altura / 2;
@@ -546,6 +649,13 @@ canvas.addEventListener("mousemove", (e) => {
 canvas.addEventListener("click", () => {
   liberarAudio();
   sincronizarMusica();
+  if (estado === "menu") {
+    if (mouseX >= BOTAO_JOGAR.x && mouseX <= BOTAO_JOGAR.x + BOTAO_JOGAR.largura &&
+        mouseY >= BOTAO_JOGAR.y && mouseY <= BOTAO_JOGAR.y + BOTAO_JOGAR.altura) {
+      prepararEscolhaInicial();
+    }
+    return;
+  }
   if (estado !== "escolhendo" && estado !== "escolha_inicial") return;
 
   const larguraCarta = 210, alturaCarta = 265, espaco = 25, yBase = 135;
@@ -713,7 +823,7 @@ function atualizar(dt) {
         boss.cooldownHab1 = 10.0;
         screenShake = 2;
         tocarBip(650, "triangle", 0.2);
-        tocarAudio(somFF2);
+        tocarFala(somFF2);
         criarTextoFlutuante(boss.x - 20, boss.y, "🧊 GELO NO GOL!", "#00e5ff", 16);
       }
       if (boss.cooldownHab2 <= 0) {
@@ -756,7 +866,7 @@ function atualizar(dt) {
         acertosFreddles = 0;
         tocarBip(400, "triangle", 0.1);
         tocarFredito();
-        tocarAudio(somFreddy2);
+        tocarFala(somFreddy2);
       }
     }
   }
@@ -810,7 +920,7 @@ function atualizar(dt) {
     miniFreddies = [];
     screenShake = 4;
     tocarBip(90, "sawtooth", 0.8);
-    if (acertosFreddles >= 3) tocarAudio(somJumpscare);
+    if (acertosFreddles >= 3) tocarFala(somJumpscare);
     criarTextoFlutuante(canvas.width / 2, canvas.height / 2 + 70, "😱 JUMP SCARE DO FREDDY!", "#ff0000", 24);
   }
 
@@ -865,14 +975,14 @@ function atualizar(dt) {
     if (Math.hypot(bola.x - powerUpMapa.x, bola.y - powerUpMapa.y) < bola.raio + powerUpMapa.raio) {
       if (powerUpMapa.tipo === "mata") {
         if (bola.velX > 0) {
-          varela.mortoTimer = 5.0;
+          varela.mortoTimer = 3.0;
           tocarBip(200, "sawtooth", 0.4);
-          criarTextoFlutuante(varela.x + 40, varela.y + 20, "💀 VARELA MORTO POR 5s!", "#ff3b30", 18);
+          criarTextoFlutuante(varela.x + 40, varela.y + 20, "💀 VARELA MORTO POR 3s!", "#ff3b30", 18);
           criarExplosao(varela.x + varela.largura / 2, varela.y + varela.altura / 2, "#ff3b30", 25);
         } else {
-          boss.mortoTimer = 5.0;
+          boss.mortoTimer = 3.0;
           tocarBip(200, "sawtooth", 0.4);
-          criarTextoFlutuante(boss.x - 20, boss.y + 40, "💀 BOSS MORTO POR 5s!", "#ff3b30", 18);
+          criarTextoFlutuante(boss.x - 20, boss.y + 40, "💀 BOSS MORTO POR 3s!", "#ff3b30", 18);
           criarExplosao(boss.x + boss.largura / 2, boss.y + boss.altura / 2, "#ff3b30", 25);
         }
       } else if (powerUpMapa.tipo === "lenta") {
@@ -989,8 +1099,8 @@ function atualizar(dt) {
     boss.flashDano = 0.5;
     screenShake = 3;
     tocarBip(850, "triangle", 0.3);
-    tocarAudioGol("varela");
-    checarEmpate();
+    const audioGol = tocarAudioGol("varela");
+    checarEmpate(audioGol);
     criarExplosao(canvas.width, bola.y, "#00ff88", 40);
     criarTextoFlutuante(canvas.width / 2, canvas.height / 2, "⚽ GOL DO VARELA!", "#00ff88", 28);
 
@@ -1006,18 +1116,18 @@ function atualizar(dt) {
     varela.flashDano = 0.5;
     screenShake = 3;
     tocarBip(140, "sawtooth", 0.45);
-    tocarAudioGol("boss");
+    const audioGol = tocarAudioGol("boss");
     if (bossAtualIndex === 1) {
       const golsBoss = MAX_VIDAS_VARELA - vidasVarela;
-      if (golsBoss === 1) tocarAudio(somFF1);
-      else if ((golsBoss === 2 || golsBoss === 3) && golpesConsecutivos < 3) tocarAudio(somFF4);
+      if (golsBoss === 1) tocarFala(somFF1);
+      else if ((golsBoss === 2 || golsBoss === 3) && golpesConsecutivos < 3) tocarFala(somFF4);
       golpesConsecutivos = 0;
     }
-    checarEmpate();
+    checarEmpate(audioGol);
     criarExplosao(0, bola.y, "#ff3b30", 40);
     criarTextoFlutuante(canvas.width / 2, canvas.height / 2, "💀 PONTO DO BOSS!", "#ff3b30", 28);
 
-    if (vidasVarela <= 0) { estado = "gameover"; sincronizarMusica(); tocarAudio(somPerde); }
+    if (vidasVarela <= 0) { estado = "gameover"; sincronizarMusica(); tocarFala(somPerde); }
     else resetarBola(1);
   }
 
@@ -1044,6 +1154,10 @@ function atualizar(dt) {
 // ========================================================
 
 function desenhar() {
+  if (estadoVisualAnterior !== estado) {
+    document.body.classList.toggle("menu-ativo", estado === "menu");
+    estadoVisualAnterior = estado;
+  }
   ctx.save();
 
   if (screenShake > 0) {
@@ -1193,15 +1307,29 @@ function desenhar() {
     const [corPU, textoPU] = estilosPU[powerUpMapa.tipo] || ["#ffcc00", "POWER"];
 
     ctx.save();
-    ctx.fillStyle = corPU;
     ctx.shadowColor = corPU;
     ctx.shadowBlur = 15;
-    ctx.beginPath();
-    ctx.arc(powerUpMapa.x, yOsc, powerUpMapa.raio, 0, Math.PI * 2);
-    ctx.fill();
+    const geloCarregado = powerUpMapa.tipo === "congela" && imgs.gelo.complete && imgs.gelo.naturalWidth > 0;
+    if (geloCarregado) {
+      ctx.beginPath();
+      ctx.arc(powerUpMapa.x, yOsc, powerUpMapa.raio, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(imgs.gelo, powerUpMapa.x - powerUpMapa.raio, yOsc - powerUpMapa.raio, powerUpMapa.raio * 2, powerUpMapa.raio * 2);
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = corPU;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(powerUpMapa.x, yOsc, powerUpMapa.raio - 1, 0, Math.PI * 2);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = corPU;
+      ctx.beginPath();
+      ctx.arc(powerUpMapa.x, yOsc, powerUpMapa.raio, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.shadowBlur = 0;
 
-    if (!(powerUpMapa.tipo === "lenta" && desenharSprite(imgs.caracol, powerUpMapa.x - 16, yOsc - 16, 32, 32))) {
+    if (!geloCarregado && !(powerUpMapa.tipo === "lenta" && desenharSprite(imgs.caracol, powerUpMapa.x - 16, yOsc - 16, 32, 32))) {
       ctx.fillStyle = "#ffffff";
       ctx.font = "bold 10px Arial";
       ctx.textAlign = "center";
@@ -1350,33 +1478,74 @@ function desenharPainelHabilidades() {
 }
 
 function desenharTelaMenu() {
-  ctx.fillStyle = "rgba(8, 12, 18, 0.94)";
+  const tempo = performance.now() / 1000;
+  const fundo = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+  fundo.addColorStop(0, "rgba(8, 13, 24, 0.97)");
+  fundo.addColorStop(1, "rgba(19, 10, 28, 0.97)");
+  ctx.fillStyle = fundo;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+  const brilho = ctx.createRadialGradient(canvas.width / 2, 185, 15, canvas.width / 2, 185, 260);
+  brilho.addColorStop(0, "rgba(0, 229, 255, 0.18)");
+  brilho.addColorStop(1, "rgba(0, 229, 255, 0)");
+  ctx.fillStyle = brilho;
+  ctx.fillRect(120, 0, canvas.width - 240, 430);
+
+  // Cartas decorativas em movimento dão vida ao menu sem competir com o botão.
+  [
+    { x: 132, y: 306, rot: -0.16, cor: "#00e5ff", nome: "DASH" },
+    { x: 728, y: 298, rot: 0.17, cor: "#ff007f", nome: "SMASH" }
+  ].forEach((carta, i) => {
+    ctx.save();
+    ctx.translate(carta.x, carta.y + Math.sin(tempo * 1.6 + i) * 9);
+    ctx.rotate(carta.rot);
+    ctx.globalAlpha = 0.72;
+    ctx.fillStyle = "rgba(20, 29, 45, 0.9)";
+    ctx.fillRect(-57, -74, 114, 148);
+    ctx.strokeStyle = carta.cor;
+    ctx.lineWidth = 2;
+    ctx.shadowColor = carta.cor;
+    ctx.shadowBlur = 16;
+    ctx.strokeRect(-57, -74, 114, 148);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = carta.cor;
+    ctx.textAlign = "center";
+    ctx.font = "bold 12px Arial";
+    ctx.fillText(carta.nome, 0, 5);
+    ctx.restore();
+  });
+
   ctx.textAlign = "center";
-  ctx.fillStyle = "#00e5ff";
-  ctx.font = "bold 38px Arial";
-  ctx.fillText("VARELA PONG ROGUELIKE", canvas.width / 2, 150);
-
-  ctx.fillStyle = "#ff007f";
-  ctx.font = "bold 18px Arial";
-  ctx.fillText("A BATALHA DOS 3 BOSSES", canvas.width / 2, 195);
-
+  ctx.shadowColor = "rgba(0, 229, 255, 0.55)";
+  ctx.shadowBlur = 22;
   ctx.fillStyle = "#ffffff";
-  ctx.font = "14px Arial";
-  ctx.fillText("1. Planilha Excel (Fácil) | 2. Free Fire (Médio) | 3. Freddy Fazbear (Difícil)", canvas.width / 2, 235);
+  ctx.font = "900 48px Arial";
+  ctx.fillText("VARELONG", canvas.width / 2, 151);
+  ctx.shadowBlur = 0;
 
-  ctx.fillStyle = "#ffcc00";
-  ctx.font = "bold 15px Arial";
-  ctx.fillText("❤️ Varela: 3 Vidas | 💀 Bosses: 4 Vidas", canvas.width / 2, 275);
+  const bossesMenu = [
+    { texto: "EXCEL", cor: "#34c759" },
+    { texto: "FREE FIRE", cor: "#ff8c00" },
+    { texto: "FREDDY", cor: "#c28a55" }
+  ];
+  bossesMenu.forEach((bossMenu, i) => {
+    const x = canvas.width / 2 - 150 + i * 150;
+    ctx.fillStyle = "rgba(255, 255, 255, 0.06)";
+    ctx.fillRect(x - 58, 247, 116, 30);
+    ctx.strokeStyle = `${bossMenu.cor}99`;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x - 58, 247, 116, 30);
+    ctx.fillStyle = bossMenu.cor;
+    ctx.font = "bold 11px Arial";
+    ctx.fillText(bossMenu.texto, x, 266);
+  });
 
-  ctx.fillStyle = "#00ffea";
-  ctx.font = "bold 20px Arial";
-  ctx.fillText("Pressione ESPAÇO para Escolher Habilidade Inicial", canvas.width / 2, 350);
-
-  ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
-  ctx.font = "13px Arial";
-  ctx.fillText("Controles: W / S ou Setas ou Mouse | M para Som", canvas.width / 2, 395);
+  ctx.fillStyle = "rgba(255, 255, 255, 0.55)";
+  ctx.font = "12px Arial";
+  ctx.fillText("Clique no fundo para ouvir a OST do menu", canvas.width / 2, 424);
+  ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
+  ctx.font = "11px Arial";
+  ctx.fillText("W / S ou setas · Mouse · M para som", canvas.width / 2, 457);
 }
 
 function desenharTelaEscolha(titulo = "ESCOLHA SEU POWER-UP") {

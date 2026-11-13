@@ -14,17 +14,20 @@
     <!-- Título do Jogo -->
     <header class="game-header">
       <h1 class="game-title">VARELA PONG <span class="badge-rogue">ROGUELIKE</span></h1>
-      <p class="game-subtitle">🔥 A BATALHA DOS 3 BOSSES: EXCEL, FREE FIRE & FREDDY FAZBEAR 🔥</p>
+      <p class="game-subtitle">Pong roguelike · três chefes, uma jornada</p>
     </header>
 
     <!-- Canvas do Jogo -->
     <div class="canvas-container">
-      <canvas id="tela" width="860" height="520"></canvas>
+      <canvas id="tela" width="860" height="520" aria-label="Varela Pong Roguelike"></canvas>
+      <button id="btn-play" class="menu-play-button" type="button" aria-label="Jogar e ativar a música">
+        <span>JOGAR</span><span class="play-icon" aria-hidden="true">▶</span>
+      </button>
     </div>
 
     <!-- Barra de Ajuda / Teclas -->
     <footer class="game-footer">
-      <div class="dica"><strong>Controles:</strong> W / S ou Setas (ou Mouse) | <strong>Dash:</strong> W/S 2x | <strong>Soco:</strong> ESPAÇO | <strong>Shield:</strong> E | <strong>Pausar:</strong> P | <strong>Mudo:</strong> M</div>
+      <div class="dica"><strong>Movimento:</strong> W / S, setas ou mouse · <strong>P:</strong> pausar · <strong>M:</strong> som</div>
     </footer>
   </div>
 
