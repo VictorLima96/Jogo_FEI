@@ -1,58 +1,91 @@
 // ========================================================
-// PONG ULTRA BALATRO - SCRIPT PRINCIPAL
+// PONG ULTRA BALATRO - SCRIPT PRINCIPAL (OTIMIZADO)
 // Inspirado em Pong + Balatro + Ultra Pool
 // ========================================================
 
-// 1. CONFIGURAÇÃO DO CANVAS
+// 1. CONFIGURAÇÃO DO CANVAS E ELEMENTOS DOM
 const canvas = document.getElementById("pongCanvas");
 const ctx = canvas.getContext("2d");
 
-// Elementos da interface HTML
-const chipsDisplay = document.getElementById("chips-display");
-const multDisplay = document.getElementById("mult-display");
-const roundPtsDisplay = document.getElementById("round-pts");
-const playerIconsDiv = document.getElementById("player-score-icons");
-const enemyIconsDiv = document.getElementById("enemy-score-icons");
-const powerupBanner = document.getElementById("powerup-banner");
-const btnPause = document.getElementById("btn-pause");
-const btnReset = document.getElementById("btn-reset");
+const dom = {
+  chips: document.getElementById("chips-display"),
+  mult: document.getElementById("mult-display"),
+  roundPts: document.getElementById("round-pts"),
+  playerIcons: document.getElementById("player-score-icons"),
+  enemyIcons: document.getElementById("enemy-score-icons"),
+  banner: document.getElementById("powerup-banner"),
+  btnPause: document.getElementById("btn-pause"),
+  btnReset: document.getElementById("btn-reset")
+};
 
-// 2. CARREGAR IMAGENS
-const imgJogador = new Image();
-imgJogador.src = "Images/player.png";
+// Cache da HUD para evitar reescrever o DOM a 60 FPS sem necessidade
+const hudCache = {
+  fichas: -1,
+  mult: -1,
+  total: -1,
+  golsJogador: -1,
+  golsInimigo: -1,
+  bannerTexto: ""
+};
 
-const imgInimigo = new Image();
-imgInimigo.src = "Images/enemy.png";
 
-const imgPowerUp = new Image();
-imgPowerUp.src = "Images/powerup.png";
+// ========================================================
+// 2. CARREGAMENTO DE IMAGENS E HELPERS
+// ========================================================
 
-const imgPonto = new Image();
-imgPonto.src = "Images/oculos.png";
+const carregarImg = (src) => {
+  const img = new Image();
+  img.src = src;
+  return img;
+};
 
-// 3. CARREGAR ÁUDIOS
-const sonsGolJogador = [
-  new Audio("Audios/gol1.mp3"),
-  new Audio("Audios/gol2.mp3"),
-  new Audio("Audios/gol3.mp3")
-];
+const imgs = {
+  jogador: carregarImg("Images/player.png"),
+  inimigo: carregarImg("Images/enemy.png"),
+  powerUp: carregarImg("Images/powerup.png"),
+  ponto: carregarImg("Images/oculos.png")
+};
 
-const sonsGolInimigo = [
-  new Audio("Audios/robogol1.mp3"),
-  new Audio("Audios/robogol2.mp3"),
-  new Audio("Audios/robogol3.mp3")
-];
+function desenharSprite(img, x, y, w, h, fallbackCor) {
+  if (img && img.complete && img.naturalWidth > 0) {
+    ctx.drawImage(img, x, y, w, h);
+    return true;
+  }
+  if (fallbackCor) {
+    ctx.fillStyle = fallbackCor;
+    ctx.fillRect(x, y, w, h);
+  }
+  return false;
+}
 
-const somEmpate = new Audio("Audios/empategol.mp3");
 
-// Efeitos sonoros rápidos via Web Audio API para respostas imediatas
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+// ========================================================
+// 3. ÁUDIOS E SINTETIZADOR
+// ========================================================
+
+const carregarAudio = (src) => {
+  const a = new Audio(encodeURI(src));
+  a.preload = "auto";
+  return a;
+};
+
+const sonsGolJogador = [1, 2, 3].map(n => carregarAudio(`Audios/gol${n}.mp3`));
+const sonsGolInimigo = [1, 2, 3].map(n => carregarAudio(`Audios/robogol${n}.mp3`));
+const somEmpate = carregarAudio("Audios/empategol.mp3");
+
+let audioCtx = null;
+function liberarAudio() {
+  if (!audioCtx) {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (Ctx) audioCtx = new Ctx();
+  }
+  if (audioCtx?.state === "suspended") audioCtx.resume();
+}
 
 function tocarBip(freq = 320, tipo = "sine", duracao = 0.08) {
+  liberarAudio();
+  if (!audioCtx) return;
   try {
-    if (audioCtx.state === "suspended") {
-      audioCtx.resume();
-    }
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.type = tipo;
@@ -68,171 +101,177 @@ function tocarBip(freq = 320, tipo = "sine", duracao = 0.08) {
 
 function tocarSomGol(tipo) {
   try {
-    if (tipo === "jogador") {
-      const idx = Math.floor(Math.random() * sonsGolJogador.length);
-      sonsGolJogador[idx].currentTime = 0;
-      sonsGolJogador[idx].play();
-    } else if (tipo === "inimigo") {
-      const idx = Math.floor(Math.random() * sonsGolInimigo.length);
-      sonsGolInimigo[idx].currentTime = 0;
-      sonsGolInimigo[idx].play();
-    } else if (tipo === "empate") {
+    if (tipo === "empate") {
       somEmpate.currentTime = 0;
-      somEmpate.play();
+      somEmpate.play().catch(() => {});
+      return;
     }
-  } catch (err) {
-    console.log("Audio play info:", err);
-  }
+    const lista = tipo === "jogador" ? sonsGolJogador : sonsGolInimigo;
+    const som = lista[Math.floor(Math.random() * lista.length)];
+    som.currentTime = 0;
+    som.play().catch(() => {});
+  } catch (e) {}
 }
 
-// 4. VARIÁVEIS DO JOGO
+
+// ========================================================
+// 4. VARIÁVEIS E ENTIDADES DO JOGO
+// ========================================================
+
 let pausado = false;
 let screenShake = 0;
+let ultimoTempo = performance.now();
 
-// Placar de Gols
 let golsJogador = 0;
 let golsInimigo = 0;
 const MAX_GOLS = 5;
 
-// Balatro: Fichas x Mult
 let fichas = 0;
 let multiplicador = 1;
 let pontuacaoTotal = 0;
 
-// Jogador (Raquete da Esquerda)
+// Velocidades calibradas para 60 FPS (unidades/seg)
 const jogador = {
   x: 24,
   y: canvas.height / 2 - 50,
   largura: 32,
   altura: 100,
-  velocidade: 7,
+  velocidade: 420,
   subindo: false,
   descendo: false
 };
 
-// Inimigo (Raquete da Direita)
 const inimigo = {
   x: canvas.width - 56,
   y: canvas.height / 2 - 50,
   largura: 32,
   altura: 100,
-  velocidade: 4.6,
+  velocidade: 276,
   estaMorto: false,
-  tempoMorte: 0,
-  duracaoMorte: 7 // 7 segundos para ressurgir
+  timerMorte: 0,
+  duracaoMorte: 7
 };
 
-// Bola (Ultra Pool)
 const bola = {
   x: canvas.width / 2,
   y: canvas.height / 2,
   raio: 10,
-  velX: 6,
-  velY: 4,
-  velMax: 14,
+  velX: 360,
+  velY: 240,
+  velMax: 840,
   rastro: []
 };
 
-// Power Up no Campo
 const powerUp = {
   x: canvas.width / 2,
   y: canvas.height / 2 - 90,
   raio: 24,
   ativoNoCampo: true,
   coletado: false,
+  timerRespawn: 0,
   balanco: 0
 };
 
-// Bumpers Centrais (estilo Ultra Pool)
 const bumpers = [
   { x: canvas.width / 2, y: 110, raio: 22, cor: "#00fff2" },
   { x: canvas.width / 2, y: canvas.height - 110, raio: 22, cor: "#ff007f" }
 ];
 
-// Partículas e Textos Flutuantes
 let particulas = [];
 let textosFlutuantes = [];
 
-function criarTextoFlutuante(x, y, texto, cor = "#ffd700", tam = 16) {
-  textosFlutuantes.push({
-    x: x,
-    y: y,
-    texto: texto,
-    cor: cor,
-    tam: tam,
-    vida: 1.0,
-    velY: -1.5
-  });
-}
+const criarTextoFlutuante = (x, y, texto, cor = "#ffd700", tam = 16) =>
+  textosFlutuantes.push({ x, y, texto, cor, tam, vida: 1.0, velY: -65 });
 
 function criarExplosao(x, y, cor, qtd = 15) {
   for (let i = 0; i < qtd; i++) {
     const ang = Math.random() * Math.PI * 2;
-    const v = 2 + Math.random() * 5;
+    const v = 120 + Math.random() * 300;
     particulas.push({
-      x: x,
-      y: y,
+      x, y,
       velX: Math.cos(ang) * v,
       velY: Math.sin(ang) * v,
       vida: 1,
-      decaimento: 0.025 + Math.random() * 0.02,
-      cor: cor,
+      decaimento: 1.5 + Math.random() * 1.2,
+      cor,
       tam: 3 + Math.random() * 3
     });
   }
 }
 
-// 5. ATUALIZAR HUD E PLACAR
-function atualizarHUD() {
-  chipsDisplay.innerText = fichas;
-  multDisplay.innerText = multiplicador;
-  roundPtsDisplay.innerText = `= ${fichas * multiplicador} pts (Total: ${pontuacaoTotal})`;
 
-  // Ícones de ponto (óculos thug life)
-  playerIconsDiv.innerHTML = "";
-  for (let i = 0; i < golsJogador; i++) {
+// ========================================================
+// 5. ATUALIZAÇÃO INTELIGENTE DA HUD (COM CACHE)
+// ========================================================
+
+function renderizarIconesPlacar(container, qtd, title) {
+  const frag = document.createDocumentFragment();
+  for (let i = 0; i < qtd; i++) {
     const icone = document.createElement("img");
-    icone.src = imgPonto.src;
+    icone.src = imgs.ponto.src;
     icone.className = "score-point-icon";
-    icone.title = "Gol do Jogador!";
-    playerIconsDiv.appendChild(icone);
+    icone.title = title;
+    frag.appendChild(icone);
+  }
+  container.replaceChildren(frag);
+}
+
+function atualizarHUD(forcar = false) {
+  if (forcar || hudCache.fichas !== fichas || hudCache.mult !== multiplicador || hudCache.total !== pontuacaoTotal) {
+    dom.chips.innerText = fichas;
+    dom.mult.innerText = multiplicador;
+    dom.roundPts.innerText = `= ${fichas * multiplicador} pts (Total: ${pontuacaoTotal})`;
+    hudCache.fichas = fichas;
+    hudCache.mult = multiplicador;
+    hudCache.total = pontuacaoTotal;
   }
 
-  enemyIconsDiv.innerHTML = "";
-  for (let i = 0; i < golsInimigo; i++) {
-    const icone = document.createElement("img");
-    icone.src = imgPonto.src;
-    icone.className = "score-point-icon";
-    icone.title = "Gol do Inimigo!";
-    enemyIconsDiv.appendChild(icone);
+  if (forcar || hudCache.golsJogador !== golsJogador) {
+    renderizarIconesPlacar(dom.playerIcons, golsJogador, "Gol do Jogador!");
+    hudCache.golsJogador = golsJogador;
   }
 
-  // Banner informativo do poder
+  if (forcar || hudCache.golsInimigo !== golsInimigo) {
+    renderizarIconesPlacar(dom.enemyIcons, golsInimigo, "Gol do Inimigo!");
+    hudCache.golsInimigo = golsInimigo;
+  }
+
+  let novoBanner = "";
   if (powerUp.coletado && !inimigo.estaMorto) {
-    powerupBanner.classList.remove("hidden");
-    powerupBanner.innerText = "⚡ PODER ATIVO! Acerte a bola no INIMIGO para eliminá-lo e abrir o gol!";
+    novoBanner = "⚡ PODER ATIVO! Acerte a bola no INIMIGO para eliminá-lo e abrir o gol!";
   } else if (inimigo.estaMorto) {
-    powerupBanner.classList.remove("hidden");
-    const segundosRestantes = Math.ceil(inimigo.duracaoMorte - (Date.now() - inimigo.tempoMorte) / 1000);
-    powerupBanner.innerText = `💀 INIMIGO ELIMINADO! O gol adversário está livre! Ele ressurge em ${segundosRestantes > 0 ? segundosRestantes : 0}s!`;
-  } else {
-    powerupBanner.classList.add("hidden");
+    const seg = Math.max(0, Math.ceil(inimigo.timerMorte));
+    novoBanner = `💀 INIMIGO ELIMINADO! O gol adversário está livre! Ele ressurge em ${seg}s!`;
+  }
+
+  if (forcar || hudCache.bannerTexto !== novoBanner) {
+    if (novoBanner) {
+      dom.banner.classList.remove("hidden");
+      dom.banner.innerText = novoBanner;
+    } else {
+      dom.banner.classList.add("hidden");
+    }
+    hudCache.bannerTexto = novoBanner;
   }
 }
 
-// 6. CONTROLES
+
+// ========================================================
+// 6. CONTROLES E FLUXO DE PARTIDA
+// ========================================================
+
 canvas.addEventListener("mousemove", (e) => {
+  if (pausado) return;
   const rect = canvas.getBoundingClientRect();
   const mouseY = e.clientY - rect.top;
-  jogador.y = mouseY - jogador.altura / 2;
-
-  if (jogador.y < 0) jogador.y = 0;
-  if (jogador.y + jogador.altura > canvas.height) jogador.y = canvas.height - jogador.altura;
+  jogador.y = Math.max(0, Math.min(canvas.height - jogador.altura, mouseY - jogador.altura / 2));
 });
 
 window.addEventListener("keydown", (e) => {
+  liberarAudio();
   if (e.key === "w" || e.key === "W" || e.key === "ArrowUp") jogador.subindo = true;
   if (e.key === "s" || e.key === "S" || e.key === "ArrowDown") jogador.descendo = true;
+  if (e.key === "p" || e.key === "P") alternarPausa();
 });
 
 window.addEventListener("keyup", (e) => {
@@ -240,23 +279,21 @@ window.addEventListener("keyup", (e) => {
   if (e.key === "s" || e.key === "S" || e.key === "ArrowDown") jogador.descendo = false;
 });
 
-btnPause.addEventListener("click", () => {
+function alternarPausa() {
   pausado = !pausado;
-  btnPause.innerText = pausado ? "Continuar" : "Pausar";
-});
+  dom.btnPause.innerText = pausado ? "Continuar" : "Pausar";
+}
 
-btnReset.addEventListener("click", () => {
-  reiniciarJogo();
-});
+dom.btnPause.addEventListener("click", alternarPausa);
+dom.btnReset.addEventListener("click", reiniciarJogo);
 
 function resetarBola(direcao = 1) {
   bola.x = canvas.width / 2;
   bola.y = canvas.height / 2;
-  bola.velX = 6 * direcao;
-  bola.velY = (Math.random() * 6 - 3) || 3;
-  bola.rastro = [];
+  bola.velX = 360 * direcao;
+  bola.velY = (Math.random() * 360 - 180) || 180;
+  bola.rastro.length = 0;
 
-  // Somar pontos da jogada estilo Balatro
   pontuacaoTotal += fichas * multiplicador;
   fichas = 0;
   multiplicador = 1;
@@ -271,33 +308,40 @@ function reiniciarJogo() {
   pontuacaoTotal = 0;
   powerUp.coletado = false;
   powerUp.ativoNoCampo = true;
+  powerUp.timerRespawn = 0;
   inimigo.estaMorto = false;
+  inimigo.timerMorte = 0;
+  particulas.length = 0;
+  textosFlutuantes.length = 0;
   resetarBola(1);
+  atualizarHUD(true);
   tocarSomGol("empate");
 }
 
-// 7. ATUALIZAÇÃO DA FÍSICA
-function atualizar() {
+
+// ========================================================
+// 7. ATUALIZAÇÃO DA FÍSICA (INDEPENDENTE DE FPS)
+// ========================================================
+
+function atualizar(dt) {
   if (pausado) return;
 
-  // Movimento Teclado
-  if (jogador.subindo && jogador.y > 0) jogador.y -= jogador.velocidade;
-  if (jogador.descendo && jogador.y + jogador.altura < canvas.height) jogador.y += jogador.velocidade;
+  // Movimento Jogador
+  if (jogador.subindo) jogador.y -= jogador.velocidade * dt;
+  if (jogador.descendo) jogador.y += jogador.velocidade * dt;
+  jogador.y = Math.max(0, Math.min(canvas.height - jogador.altura, jogador.y));
 
-  // Movimento Inimigo (IA simples)
+  // Movimento ou Ressurreição do Inimigo (pausa corretamente junto com o jogo)
   if (!inimigo.estaMorto) {
     const centroInimigo = inimigo.y + inimigo.altura / 2;
-    if (centroInimigo < bola.y - 12) {
-      inimigo.y += inimigo.velocidade;
-    } else if (centroInimigo > bola.y + 12) {
-      inimigo.y -= inimigo.velocidade;
+    const diff = bola.y - centroInimigo;
+    if (Math.abs(diff) > 12) {
+      inimigo.y += Math.sign(diff) * inimigo.velocidade * dt;
     }
-    if (inimigo.y < 0) inimigo.y = 0;
-    if (inimigo.y + inimigo.altura > canvas.height) inimigo.y = canvas.height - inimigo.altura;
+    inimigo.y = Math.max(0, Math.min(canvas.height - inimigo.altura, inimigo.y));
   } else {
-    // Inimigo morto: contagem regressiva de ressurgimento (6 a 7s)
-    const tempoMorto = (Date.now() - inimigo.tempoMorte) / 1000;
-    if (tempoMorto >= inimigo.duracaoMorte) {
+    inimigo.timerMorte -= dt;
+    if (inimigo.timerMorte <= 0) {
       inimigo.estaMorto = false;
       inimigo.y = canvas.height / 2 - inimigo.altura / 2;
       criarExplosao(inimigo.x + inimigo.largura / 2, inimigo.y + inimigo.altura / 2, "#00ff88", 25);
@@ -305,36 +349,34 @@ function atualizar() {
     }
   }
 
-  // Rastro da bola (Ultra Pool)
-  bola.rastro.unshift({ x: bola.x, y: bola.y });
-  if (bola.rastro.length > 7) bola.rastro.pop();
+  // Respawn do Power-Up controlado por dt (sem setTimeout vazando na pausa)
+  if (!powerUp.ativoNoCampo && !powerUp.coletado && powerUp.timerRespawn > 0) {
+    powerUp.timerRespawn -= dt;
+    if (powerUp.timerRespawn <= 0) powerUp.ativoNoCampo = true;
+  }
+
+  // Rastro em O(1)
+  bola.rastro.push({ x: bola.x, y: bola.y });
+  if (bola.rastro.length > 7) bola.rastro.shift();
 
   // Movimentação da bola
-  bola.x += bola.velX;
-  bola.y += bola.velY;
+  bola.x += bola.velX * dt;
+  bola.y += bola.velY * dt;
 
   // Quique nas paredes superior e inferior
-  if (bola.y - bola.raio <= 0) {
-    bola.y = bola.raio;
-    bola.velY = -bola.velY;
-    multiplicador += 1;
-    tocarBip(280);
-    criarExplosao(bola.x, bola.y, "#ffffff", 6);
-  }
-  if (bola.y + bola.raio >= canvas.height) {
-    bola.y = canvas.height - bola.raio;
+  if (bola.y - bola.raio <= 0 || bola.y + bola.raio >= canvas.height) {
+    bola.y = bola.y - bola.raio <= 0 ? bola.raio : canvas.height - bola.raio;
     bola.velY = -bola.velY;
     multiplicador += 1;
     tocarBip(280);
     criarExplosao(bola.x, bola.y, "#ffffff", 6);
   }
 
-  // Quique nos Bumpers centrais (Ultra Pool)
-  bumpers.forEach(b => {
+  // Bumpers centrais (Ultra Pool)
+  for (const b of bumpers) {
     const dx = bola.x - b.x;
     const dy = bola.y - b.y;
-    const dist = Math.hypot(dx, dy);
-    if (dist < bola.raio + b.raio) {
+    if (Math.hypot(dx, dy) < bola.raio + b.raio) {
       const angulo = Math.atan2(dy, dx);
       const vel = Math.min(Math.hypot(bola.velX, bola.velY) * 1.05, bola.velMax);
       bola.velX = Math.cos(angulo) * vel;
@@ -347,15 +389,13 @@ function atualizar() {
       criarExplosao(b.x, b.y, b.cor, 16);
       criarTextoFlutuante(b.x, b.y - 25, "+20 Fichas! +2X Mult!", b.cor, 14);
     }
-  });
+  }
 
   // Coleta do Power-Up
   if (powerUp.ativoNoCampo) {
-    powerUp.balanco += 0.05;
+    powerUp.balanco += 3 * dt;
     const yOscilando = powerUp.y + Math.sin(powerUp.balanco) * 7;
-    const dx = bola.x - powerUp.x;
-    const dy = bola.y - yOscilando;
-    if (Math.hypot(dx, dy) < bola.raio + powerUp.raio) {
+    if (Math.hypot(bola.x - powerUp.x, bola.y - yOscilando) < bola.raio + powerUp.raio) {
       powerUp.ativoNoCampo = false;
       powerUp.coletado = true;
       screenShake = 8;
@@ -369,21 +409,21 @@ function atualizar() {
 
   // Colisão com Jogador
   if (
+    bola.velX < 0 &&
     bola.x - bola.raio <= jogador.x + jogador.largura &&
     bola.x + bola.raio >= jogador.x &&
     bola.y >= jogador.y &&
-    bola.y <= jogador.y + jogador.altura &&
-    bola.velX < 0
+    bola.y <= jogador.y + jogador.altura
   ) {
     bola.x = jogador.x + jogador.largura + bola.raio;
     const relativo = (bola.y - (jogador.y + jogador.altura / 2)) / (jogador.altura / 2);
     const angulo = relativo * (Math.PI / 3);
-    const vel = Math.min(Math.hypot(bola.velX, bola.velY) + 0.3, bola.velMax);
+    const vel = Math.min(Math.hypot(bola.velX, bola.velY) + 18, bola.velMax);
 
     bola.velX = Math.cos(angulo) * vel;
     bola.velY = Math.sin(angulo) * vel;
-
     fichas += 10;
+
     if (Math.abs(relativo) > 0.65) {
       multiplicador += 2;
       screenShake = 7;
@@ -395,55 +435,44 @@ function atualizar() {
     criarExplosao(bola.x, bola.y, "#00b0ff", 10);
   }
 
-  // Colisão com Inimigo (se vivo)
-  if (!inimigo.estaMorto) {
-    if (
-      bola.x + bola.raio >= inimigo.x &&
-      bola.x - bola.raio <= inimigo.x + inimigo.largura &&
-      bola.y >= inimigo.y &&
-      bola.y <= inimigo.y + inimigo.altura &&
-      bola.velX > 0
-    ) {
-      // SE O PODER ESTIVER ATIVO: BOLA MATA O INIMIGO E ABRE O GOL!
-      if (powerUp.coletado) {
-        inimigo.estaMorto = true;
-        inimigo.tempoMorte = Date.now();
-        powerUp.coletado = false; // Consome o poder
-        screenShake = 14;
+  // Colisão com Inimigo
+  if (
+    !inimigo.estaMorto &&
+    bola.velX > 0 &&
+    bola.x + bola.raio >= inimigo.x &&
+    bola.x - bola.raio <= inimigo.x + inimigo.largura &&
+    bola.y >= inimigo.y &&
+    bola.y <= inimigo.y + inimigo.altura
+  ) {
+    if (powerUp.coletado) {
+      inimigo.estaMorto = true;
+      inimigo.timerMorte = inimigo.duracaoMorte;
+      powerUp.coletado = false;
+      powerUp.timerRespawn = 9.0;
+      screenShake = 14;
 
-        // Rebate a bola com impacto cinematográfico
-        bola.velX = -Math.abs(bola.velX) * 1.15;
-        criarExplosao(inimigo.x, inimigo.y + inimigo.altura / 2, "#ff0044", 35);
-        criarTextoFlutuante(inimigo.x - 30, inimigo.y + 30, "💥 K.O.! GOL LIBERADO (7s)!", "#ff0044", 18);
-        tocarBip(150, "sawtooth", 0.35);
+      bola.velX = -Math.abs(bola.velX) * 1.15;
+      criarExplosao(inimigo.x, inimigo.y + inimigo.altura / 2, "#ff0044", 35);
+      criarTextoFlutuante(inimigo.x - 30, inimigo.y + 30, "💥 K.O.! GOL LIBERADO (7s)!", "#ff0044", 18);
+      tocarBip(150, "sawtooth", 0.35);
 
-        fichas += 100;
-        multiplicador += 5;
+      fichas += 100;
+      multiplicador += 5;
+    } else {
+      bola.x = inimigo.x - bola.raio;
+      const relativo = (bola.y - (inimigo.y + inimigo.altura / 2)) / (inimigo.altura / 2);
+      const angulo = relativo * (Math.PI / 3);
+      const vel = Math.hypot(bola.velX, bola.velY);
 
-        // Power-up volta a aparecer depois de 9 segundos
-        setTimeout(() => {
-          powerUp.ativoNoCampo = true;
-        }, 9000);
-
-      } else {
-        // Rebatida normal do inimigo
-        bola.x = inimigo.x - bola.raio;
-        const relativo = (bola.y - (inimigo.y + inimigo.altura / 2)) / (inimigo.altura / 2);
-        const angulo = relativo * (Math.PI / 3);
-        const vel = Math.hypot(bola.velX, bola.velY);
-
-        bola.velX = -Math.cos(angulo) * vel;
-        bola.velY = Math.sin(angulo) * vel;
-
-        tocarBip(380);
-        criarExplosao(bola.x, bola.y, "#ff4757", 10);
-      }
+      bola.velX = -Math.cos(angulo) * vel;
+      bola.velY = Math.sin(angulo) * vel;
+      tocarBip(380);
+      criarExplosao(bola.x, bola.y, "#ff4757", 10);
     }
   }
 
-  // VERIFICAÇÃO DE GOL NO INIMIGO (DIREITA)
+  // Gol no Inimigo (Direita)
   if (bola.x + bola.raio >= canvas.width) {
-    // Se o poder está ativo mas o inimigo NÃO foi morto ainda, a barreira protege o gol!
     if (powerUp.coletado && !inimigo.estaMorto) {
       bola.x = canvas.width - bola.raio;
       bola.velX = -bola.velX;
@@ -451,7 +480,6 @@ function atualizar() {
       tocarBip(180, "sawtooth", 0.15);
       criarExplosao(canvas.width, bola.y, "#ff0044", 15);
     } else {
-      // GOL VÁLIDO DO JOGADOR!
       golsJogador++;
       tocarSomGol("jogador");
       criarExplosao(canvas.width, bola.y, "#00ff88", 45);
@@ -459,6 +487,7 @@ function atualizar() {
       screenShake = 12;
 
       if (golsJogador >= MAX_GOLS) {
+        atualizarHUD();
         setTimeout(() => {
           alert("🎉 VITÓRIA! VOCÊ MARCOU 5 GOLS E VENCEU O ROBÔ!");
           reiniciarJogo();
@@ -469,7 +498,7 @@ function atualizar() {
     }
   }
 
-  // VERIFICAÇÃO DE GOL DO INIMIGO (ESQUERDA)
+  // Gol do Inimigo (Esquerda)
   if (bola.x - bola.raio <= 0) {
     golsInimigo++;
     tocarSomGol("inimigo");
@@ -478,6 +507,7 @@ function atualizar() {
     screenShake = 12;
 
     if (golsInimigo >= MAX_GOLS) {
+      atualizarHUD();
       setTimeout(() => {
         alert("💀 O ROBÔ VENCEU! CLIQUE EM OK PARA TENTAR NOVAMENTE!");
         reiniciarJogo();
@@ -487,38 +517,44 @@ function atualizar() {
     }
   }
 
-  // Atualizar partículas
-  for (let i = particulas.length - 1; i >= 0; i--) {
-    const p = particulas[i];
-    p.x += p.velX;
-    p.y += p.velY;
-    p.vida -= p.decaimento;
-    if (p.vida <= 0) particulas.splice(i, 1);
-  }
+  // Partículas e Textos Flutuantes (agora renderizados e limpos corretamente!)
+  particulas = particulas.filter(p => {
+    p.x += p.velX * dt;
+    p.y += p.velY * dt;
+    p.vida -= p.decaimento * dt;
+    return p.vida > 0;
+  });
 
-  // Suavizar screen shake
-  if (screenShake > 0) screenShake *= 0.88;
-  if (screenShake < 0.2) screenShake = 0;
+  textosFlutuantes = textosFlutuantes.filter(tf => {
+    tf.y += tf.velY * dt;
+    tf.vida -= 0.9 * dt;
+    return tf.vida > 0;
+  });
+
+  if (screenShake > 0) {
+    screenShake *= Math.pow(0.88, dt * 60);
+    if (screenShake < 0.2) screenShake = 0;
+  }
 
   atualizarHUD();
 }
 
-// 8. DESENHAR NO CANVAS
+
+// ========================================================
+// 8. RENDERIZAÇÃO NO CANVAS
+// ========================================================
+
 function desenhar() {
   ctx.save();
 
-  // Screen shake
   if (screenShake > 0) {
-    const shakeX = (Math.random() - 0.5) * screenShake * 2;
-    const shakeY = (Math.random() - 0.5) * screenShake * 2;
-    ctx.translate(shakeX, shakeY);
+    ctx.translate((Math.random() - 0.5) * screenShake * 2, (Math.random() - 0.5) * screenShake * 2);
   }
 
-  // Fundo
+  // Fundo e linhas da mesa
   ctx.fillStyle = "#0c1710";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Linhas da mesa
   ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
   ctx.lineWidth = 3;
   ctx.setLineDash([10, 10]);
@@ -528,13 +564,12 @@ function desenhar() {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // Círculo central
   ctx.beginPath();
   ctx.arc(canvas.width / 2, canvas.height / 2, 60, 0, Math.PI * 2);
   ctx.stroke();
 
-  // Bumpers centrais (Ultra Pool)
-  bumpers.forEach(b => {
+  // Bumpers centrais
+  for (const b of bumpers) {
     ctx.fillStyle = b.cor;
     ctx.shadowColor = b.cor;
     ctx.shadowBlur = 12;
@@ -546,8 +581,8 @@ function desenhar() {
     ctx.beginPath();
     ctx.arc(b.x, b.y, b.raio * 0.4, 0, Math.PI * 2);
     ctx.fill();
-    ctx.shadowBlur = 0;
-  });
+  }
+  ctx.shadowBlur = 0;
 
   // Power-Up no campo
   if (powerUp.ativoNoCampo) {
@@ -555,9 +590,7 @@ function desenhar() {
     ctx.shadowColor = "#ffd700";
     ctx.shadowBlur = 15;
 
-    if (imgPowerUp.complete && imgPowerUp.naturalWidth > 0) {
-      ctx.drawImage(imgPowerUp, powerUp.x - 24, yOsc - 24, 48, 48);
-    } else {
+    if (!desenharSprite(imgs.powerUp, powerUp.x - 24, yOsc - 24, 48, 48)) {
       ctx.fillStyle = "#ffd700";
       ctx.beginPath();
       ctx.arc(powerUp.x, yOsc, powerUp.raio, 0, Math.PI * 2);
@@ -571,11 +604,10 @@ function desenhar() {
     ctx.fillText("PODER", powerUp.x, yOsc - 30);
   }
 
-  // BARREIRA DO GOL BLOQUEADO
+  // Barreira do gol bloqueado
   if (powerUp.coletado && !inimigo.estaMorto) {
     ctx.fillStyle = "rgba(255, 0, 68, 0.4)";
     ctx.fillRect(canvas.width - 16, 0, 16, canvas.height);
-
     ctx.strokeStyle = "#ff0044";
     ctx.lineWidth = 3;
     ctx.strokeRect(canvas.width - 16, 0, 16, canvas.height);
@@ -590,45 +622,41 @@ function desenhar() {
     ctx.restore();
   }
 
-  // JOGADOR
-  if (imgJogador.complete && imgJogador.naturalWidth > 0) {
-    ctx.drawImage(imgJogador, jogador.x - 8, jogador.y, jogador.largura + 16, jogador.altura);
-  } else {
+  // Jogador
+  if (!desenharSprite(imgs.jogador, jogador.x - 8, jogador.y, jogador.largura + 16, jogador.altura)) {
     ctx.fillStyle = "#00b0ff";
     ctx.fillRect(jogador.x, jogador.y, jogador.largura, jogador.altura);
   }
 
-  // INIMIGO (ou contador de morte)
+  // Inimigo
   if (!inimigo.estaMorto) {
-    if (imgInimigo.complete && imgInimigo.naturalWidth > 0) {
-      ctx.drawImage(imgInimigo, inimigo.x - 8, inimigo.y, inimigo.largura + 16, inimigo.altura);
-    } else {
+    if (!desenharSprite(imgs.inimigo, inimigo.x - 8, inimigo.y, inimigo.largura + 16, inimigo.altura)) {
       ctx.fillStyle = "#ff4757";
       ctx.fillRect(inimigo.x, inimigo.y, inimigo.largura, inimigo.altura);
     }
   } else {
-    // Texto de inimigo morto e contagem regressiva
-    const segRestantes = Math.ceil(inimigo.duracaoMorte - (Date.now() - inimigo.tempoMorte) / 1000);
+    const segRestantes = Math.max(0, Math.ceil(inimigo.timerMorte));
     ctx.fillStyle = "#ff4757";
     ctx.font = "bold 18px Arial";
     ctx.textAlign = "center";
     ctx.fillText("💀 ELIMINADO!", inimigo.x + inimigo.largura / 2, canvas.height / 2 - 12);
     ctx.font = "bold 14px Arial";
     ctx.fillStyle = "#00ff88";
-    ctx.fillText(`Volta em: ${segRestantes > 0 ? segRestantes : 0}s`, inimigo.x + inimigo.largura / 2, canvas.height / 2 + 14);
+    ctx.fillText(`Volta em: ${segRestantes}s`, inimigo.x + inimigo.largura / 2, canvas.height / 2 + 14);
   }
 
-  // RASTRO DA BOLA (Ultra Pool)
-  for (let i = 0; i < bola.rastro.length; i++) {
+  // Rastro da bola (do mais antigo ao mais recente)
+  const lenRastro = bola.rastro.length;
+  for (let i = 0; i < lenRastro; i++) {
     const r = bola.rastro[i];
-    const alpha = (1 - i / bola.rastro.length) * 0.35;
-    ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+    const fator = (i + 1) / lenRastro;
+    ctx.fillStyle = `rgba(255, 255, 255, ${fator * 0.35})`;
     ctx.beginPath();
-    ctx.arc(r.x, r.y, bola.raio * (1 - i / bola.rastro.length), 0, Math.PI * 2);
+    ctx.arc(r.x, r.y, bola.raio * fator, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  // BOLA
+  // Bola
   ctx.fillStyle = "#ffffff";
   ctx.shadowColor = "#ffffff";
   ctx.shadowBlur = 8;
@@ -637,14 +665,22 @@ function desenhar() {
   ctx.fill();
   ctx.shadowBlur = 0;
 
-  // PARTÍCULAS
-  particulas.forEach(p => {
+  // Partículas e Textos Flutuantes
+  for (const p of particulas) {
     ctx.fillStyle = p.cor;
     ctx.globalAlpha = Math.max(p.vida, 0);
     ctx.beginPath();
     ctx.arc(p.x, p.y, p.tam, 0, Math.PI * 2);
     ctx.fill();
-  });
+  }
+
+  for (const tf of textosFlutuantes) {
+    ctx.fillStyle = tf.cor;
+    ctx.globalAlpha = Math.max(tf.vida, 0);
+    ctx.font = `bold ${tf.tam}px Arial`;
+    ctx.textAlign = "center";
+    ctx.fillText(tf.texto, tf.x, tf.y);
+  }
   ctx.globalAlpha = 1;
 
   // Tela Pausada
@@ -660,13 +696,23 @@ function desenhar() {
   ctx.restore();
 }
 
+
+// ========================================================
 // 9. LOOP PRINCIPAL
-function loop() {
-  atualizar();
+// ========================================================
+
+function loop(tempoAtual) {
+  const dt = Math.min((tempoAtual - ultimoTempo) / 1000, 0.1);
+  ultimoTempo = tempoAtual;
+
+  atualizar(dt);
   desenhar();
   requestAnimationFrame(loop);
 }
 
-// Início
 resetarBola(1);
-loop();
+atualizarHUD(true);
+requestAnimationFrame((tempo) => {
+  ultimoTempo = tempo;
+  loop(tempo);
+});
